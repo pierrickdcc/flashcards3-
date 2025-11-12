@@ -1,10 +1,11 @@
+
 import { useState, useEffect } from 'react';
 import { motion, useAnimation } from 'framer-motion';
 import { useFlashcard } from "../context/FlashcardContext";
 
 const ReviewMode = () => {
-  const { getCardsToReview, reviewCard, setReviewMode } = useFlashcard();
-  const [cardsToReview, setCardsToReview] = useState(getCardsToReview());
+  const { getCardsToReview, reviewCard, setReviewMode, selectedSubject } = useFlashcard();
+  const [cardsToReview, setCardsToReview] = useState(getCardsToReview(selectedSubject));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [direction, setDirection] = useState(0);
@@ -48,7 +49,14 @@ const ReviewMode = () => {
     }
   };
 
-  if (!currentCard) return null;
+  if (!currentCard) {
+    // This can happen if all cards are reviewed and the component hasn't been unmounted yet.
+    // Or if there were no cards to review in the first place.
+    useEffect(() => {
+        setReviewMode(false);
+    }, []);
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 bg-white dark:bg-gray-900 z-50 flex flex-col">
