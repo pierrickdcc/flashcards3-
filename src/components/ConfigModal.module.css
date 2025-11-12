@@ -1,0 +1,52 @@
+.configModal {
+  max-width: 42rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.helpText {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
+.sqlInstructions {
+  background: var(--code-bg);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.sqlTitle {
+  font-size: 0.875rem;
+  color: var(--text);
+  font-weight: 500;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.sqlBlock {
+  font-size: 0.75rem;
+  background: var(--input-bg);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  margin: 0;
+}

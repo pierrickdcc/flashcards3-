@@ -1,0 +1,42 @@
+.viewerContainer {
+  position: fixed;
+  inset: 0;
+  background: var(--background);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.closeButton:hover {
+  color: var(--text);
+}
+
+.iframe {
+  flex-grow: 1;
+  border: none;
+  width: 100%;
+  height: 100%;
+}

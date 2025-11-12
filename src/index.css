@@ -1,0 +1,130 @@
+/* src/index.css */
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Thème Clair */
+body.light {
+  --bg: #F9FAFB;
+  --card: rgba(255, 255, 255, 0.9);
+  --card-hover: rgba(255, 255, 255, 1);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --border: rgba(0, 0, 0, 0.08);
+  --text: #0E1116;
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --accent: #3B82F6;
+  --accent-hover: #2563EB;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --modal-bg: rgba(255, 255, 255, 0.95);
+  --modal-overlay: rgba(0, 0, 0, 0.5);
+  --code-bg: rgba(0, 0, 0, 0.03);
+}
+
+/* Thème Sombre */
+body.dark {
+  --bg: #0E1116;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-hover: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #F9FAFB;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --accent: #3B82F6;
+  --accent-hover: #2563EB;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --modal-bg: rgba(20, 25, 35, 0.95);
+  --modal-overlay: rgba(0, 0, 0, 0.5);
+  --code-bg: rgba(0, 0, 0, 0.3);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  transition: background 0.3s ease;
+}
+
+/* Style de base pour les inputs et selects */
+input[type="text"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  font-size: 1rem;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Retirer les styles de base des boutons */
+button {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Pour cacher le input[type=file] */
+.hidden-file-input {
+  display: none;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 transition-all duration-200 hover:shadow-lg;
+  }
+  
+  .btn-primary {
+    @apply px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors;
+  }
+}
+
+/* Swipe indicators pour mobile */
+@media (max-width: 768px) {
+  .swipe-hint {
+    @apply fixed bottom-20 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 bg-white/80 dark:bg-gray-800/80 px-3 py-1 rounded-full backdrop-blur-sm;
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+}

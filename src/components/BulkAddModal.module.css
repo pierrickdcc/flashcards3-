@@ -1,0 +1,25 @@
+.bulkModal {
+  max-width: 42rem;
+}
+
+.helpText {
+  color: var(--text-secondary);
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.code {
+  background: var(--code-bg);
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.textarea {
+  height: 12rem;
+  font-size: 0.875rem;
+  resize: vertical;
+}

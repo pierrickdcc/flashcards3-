@@ -1,0 +1,6 @@
+.dashboard {
+  padding: 2rem;
+  background-color: var(--color-background-secondary);
+  border-radius: 8px;
+  margin-top: 2rem;
+}

@@ -1,0 +1,73 @@
+.filtersContainer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.viewToggle {
+  display: flex;
+  background: var(--card);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  padding: 0.25rem;
+}
+
+.toggleButton {
+  padding: 0.5rem;
+  border-radius: 0.6rem;
+  color: var(--text);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.toggleButton.active {
+  background: var(--accent);
+  color: white;
+}
+
+.toggleButton:not(.active):hover {
+  background: var(--card-hover);
+}
+
+.searchContainer {
+  position: relative;
+  flex-grow: 1;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 0.625rem 1rem 0.625rem 2.5rem;
+  border-radius: 0.75rem;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+}
+
+.subjectSelect {
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.deleteButton {
+  padding: 0.5rem;
+  border-radius: 0.6rem;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.deleteButton:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.1);
+}

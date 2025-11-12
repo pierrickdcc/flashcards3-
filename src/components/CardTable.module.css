@@ -1,0 +1,156 @@
+.tableContainer {
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 4px 20px var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--text);
+}
+
+.th {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.th:last-child {
+  text-align: right;
+}
+
+.tr {
+  transition: all 0.2s ease;
+}
+
+.tr:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.tr:hover {
+  background: var(--card-hover);
+}
+
+.td {
+  padding: 1rem 1.5rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.smallText {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.centerText {
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.actionCell {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.actionButton {
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.actionButton:hover {
+  color: var(--text);
+}
+
+.actionButton.checkButton {
+  color: #10B981;
+}
+.actionButton.checkButton:hover {
+  color: #059669;
+}
+
+.actionButton.deleteButton {
+  color: var(--text-secondary);
+}
+.actionButton.deleteButton:hover {
+  color: #EF4444;
+}
+
+.input, .select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  min-width: 150px;
+}
+
+.subjectTag {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+body.light .subjectTag {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+@media (max-width: 768px) {
+  .table {
+    display: block;
+  }
+
+  .thead {
+    display: none;
+  }
+
+  .tr {
+    display: block;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+  }
+
+  .td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--border-light);
+  }
+
+  .td:last-child {
+    border-bottom: none;
+  }
+
+  .td::before {
+    content: attr(data-label);
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .actionCell {
+    justify-content: flex-start;
+    padding-top: 1rem;
+  }
+
+  .input, .select {
+    width: 100%;
+  }
+}
