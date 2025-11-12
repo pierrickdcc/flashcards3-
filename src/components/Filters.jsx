@@ -1,84 +1,83 @@
 
 import React from 'react';
-import { useDebouncedCallback } from 'use-debounce';
-import { BookOpen, Table, BarChart, Trash2, BookCopy, Search } from 'lucide-react';
 import { useFlashcard } from '../context/FlashcardContext';
+import { Search, LayoutGrid, List } from 'lucide-react';
+import { VIEW_MODE } from '../constants/app';
 
-const Filters = ({ view, setView, subjects, onDeleteSubject }) => {
-  const { selectedSubject, setSelectedSubject, searchTerm, setSearchTerm } = useFlashcard();
+// PAS D'IMPORT DE .module.css
 
-  const debouncedSearch = useDebouncedCallback((value) => {
-    setSearchTerm(value);
-  }, 300);
+const Filters = () => {
+  const {
+    subjects,
+    selectedSubject,
+    setSelectedSubject,
+    searchTerm,
+    debouncedSetSearchTerm,
+    viewMode,
+    setViewMode,
+  } = useFlashcard();
 
-  const baseButtonClass = "p-2 rounded-lg transition-colors duration-200";
+  const handleSearchChange = (e) => {
+    debouncedSetSearchTerm(e.target.value);
+  };
+
+  const baseButtonClass = "p-2 rounded-lg transition-colors";
   const activeButtonClass = "bg-blue-600 text-white";
-  const inactiveButtonClass = "hover:bg-gray-200 dark:hover:bg-gray-700";
+  const inactiveButtonClass = "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600";
 
   return (
-    <div className="my-6 flex flex-wrap items-center gap-4">
-      <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-        <button
-          onClick={() => setView('courses')}
-          className={`${baseButtonClass} ${view === 'courses' ? activeButtonClass : inactiveButtonClass}`}
-        >
-          <BookCopy size={18} />
-        </button>
-        <button
-          onClick={() => setView('cards')}
-          className={`${baseButtonClass} ${view === 'cards' ? activeButtonClass : inactiveButtonClass}`}
-        >
-          <BookOpen size={18} />
-        </button>
-        <button
-          onClick={() => setView('table')}
-          className={`${baseButtonClass} ${view === 'table' ? activeButtonClass : inactiveButtonClass}`}
-        >
-          <Table size={18} />
-        </button>
-        <button
-          onClick={() => setView('dashboard')}
-          className={`${baseButtonClass} ${view === 'dashboard' ? activeButtonClass : inactiveButtonClass}`}
-        >
-          <BarChart size={18} />
-        </button>
-      </div>
+    <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-4">
+      <div className="flex flex-col md:flex-row gap-4">
 
-      {(view === 'cards' || view === 'table') && (
-        <div className="relative flex-grow min-w-[200px]">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        {/* Barre de recherche */}
+        <div className="relative flex-grow">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10">
+            <Search size={20} />
+          </span>
           <input
             type="text"
             placeholder="Rechercher des cartes..."
             defaultValue={searchTerm}
-            onChange={(e) => debouncedSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            onChange={handleSearchChange}
+            className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-      )}
 
-      {view !== 'dashboard' && view !== 'courses' && (
-        <div className="flex items-center gap-2">
+        {/* Filtres et Vues */}
+        <div className="flex flex-shrink-0 gap-2">
+          {/* Selecteur de Matière */}
           <select
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="flex-grow md:flex-grow-0 rounded-lg bg-gray-100 dark:bg-gray-700 dark:text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Toutes les matières</option>
-            {(subjects || []).map(s => (
-              <option key={s.id} value={s.name}>{s.name}</option>
+            {subjects.map((subject) => (
+              <option key={subject.id} value={subject.name}>
+                {subject.name}
+              </option>
             ))}
           </select>
-          {selectedSubject !== 'all' && (
+
+          {/* Boutons de Vue */}
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
-              onClick={() => onDeleteSubject(selectedSubject)}
-              className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl"
+              onClick={() => setViewMode(VIEW_MODE.GRID)}
+              className={`${baseButtonClass} ${viewMode === VIEW_MODE.GRID ? activeButtonClass : inactiveButtonClass}`}
+              aria-label="Grid View"
             >
-              <Trash2 size={18} />
+              <LayoutGrid size={20} />
             </button>
-          )}
+            <button
+              onClick={() => setViewMode(VIEW_MODE.TABLE)}
+              className={`${baseButtonClass} ${viewMode === VIEW_MODE.TABLE ? activeButtonClass : inactiveButtonClass}`}
+              aria-label="Table View"
+            >
+              <List size={20} />
+            </button>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
