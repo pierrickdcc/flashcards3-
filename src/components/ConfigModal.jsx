@@ -1,6 +1,5 @@
+
 import React, { useState, useEffect } from 'react';
-import modalStyles from './Modal.module.css';
-import styles from './ConfigModal.module.css';
 import { useFlashcard } from '../context/FlashcardContext';
 import { db } from '../db';
 
@@ -29,30 +28,31 @@ const ConfigModal = ({ show, onClose }) => {
   };
 
   return (
-    <div className={modalStyles.overlay} onClick={onClose}>
-      <div className={`${modalStyles.modal} ${styles.configModal}`} onClick={(e) => e.stopPropagation()}>
-        <h2 className={modalStyles.title}>Configuration</h2>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Configuration</h2>
         
-        <div className={styles.form}>
+        <div>
           <div>
-            <label className={styles.label}>Workspace ID</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Workspace ID</label>
             <input
               type="text"
               value={localWorkspaceId}
               onChange={(e) => setLocalWorkspaceId(e.target.value)}
               placeholder="mon-groupe-revision"
+              className="mt-2 w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
-            <p className={styles.helpText}>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               Changer de Workspace ID videra vos données locales et synchronisera avec le nouveau groupe.
             </p>
           </div>
         </div>
 
-        <div className={modalStyles.buttonRow}>
-          <button onClick={handleSave} className={`${modalStyles.button} ${modalStyles.primaryButton}`}>
+        <div className="flex gap-4 mt-6">
+          <button onClick={handleSave} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
             Enregistrer
           </button>
-          <button onClick={onClose} className={`${modalStyles.button} ${modalStyles.secondaryButton}`}>
+          <button onClick={onClose} className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
             Annuler
           </button>
         </div>

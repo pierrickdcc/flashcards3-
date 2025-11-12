@@ -1,6 +1,6 @@
+
 import React, { useMemo } from 'react';
 import { useFlashcard } from '../context/FlashcardContext';
-import styles from './Dashboard.module.css';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1943'];
@@ -49,72 +49,70 @@ const Dashboard = () => {
       })
       .slice(0, 5);
 
-    const totalInterval = cards.reduce((acc, c) => acc + (c.interval || 1), 0);
-    const averageStrength = cards.length > 0 ? Math.round((totalInterval / cards.length) * 10) / 10 : 0;
-
-
-    return { forecast, toReviewToday, strengthBySubject, cardDistribution, difficultCards, averageStrength };
+    return { forecast, toReviewToday, strengthBySubject, cardDistribution, difficultCards };
   }, [cards, subjects]);
 
   if (!stats) {
     return (
-      <div className={styles.dashboard}>
-        <div className={styles.emptyState}>
-          <h2>Commencez à ajouter des cartes !</h2>
-          <p>Le tableau de bord affichera vos statistiques une fois que vous aurez du contenu.</p>
-        </div>
+      <div className="text-center py-16 px-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Commencez à ajouter des cartes !</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">Le tableau de bord affichera vos statistiques une fois que vous aurez du contenu.</p>
       </div>
     );
   }
 
+  const ChartContainer = ({ title, children }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">{title}</h3>
+      {children}
+    </div>
+  );
+
   return (
-    <div className={styles.dashboard}>
-       <div className={styles.grid}>
-        <div className={styles.statCard}>
-          <h3>Total des cartes</h3>
-          <p>{cards.length}</p>
+    <div className="space-y-8">
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total des cartes</h3>
+          <p className="text-3xl font-bold text-gray-800 dark:text-white mt-2">{cards.length}</p>
         </div>
-        <div className={styles.statCard}>
-          <h3>À réviser</h3>
-          <p>{stats.toReviewToday}</p>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">À réviser</h3>
+          <p className="text-3xl font-bold text-yellow-500 mt-2">{stats.toReviewToday}</p>
         </div>
-        <div className={styles.statCard}>
-          <h3>Matières</h3>
-          <p>{subjects?.length || 0}</p>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Matières</h3>
+          <p className="text-3xl font-bold text-green-500 mt-2">{subjects?.length || 0}</p>
         </div>
       </div>
 
-      <div className={styles.grid}>
-        <div className={styles.chartContainer}>
-          <h3>Prévisions de révision (7 prochains jours)</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <ChartContainer title="Prévisions de révision (7 prochains jours)">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={stats.forecast}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis allowDecimals={false}/>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis dataKey="day" tick={{ fill: 'var(--text-secondary)' }} />
+              <YAxis allowDecimals={false} tick={{ fill: 'var(--text-secondary)' }} />
               <Tooltip />
               <Legend />
               <Bar dataKey="a_reviser" fill="#8884d8" />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </ChartContainer>
 
-        <div className={styles.chartContainer}>
-          <h3>Force par matière (intervalle moyen en jours)</h3>
+        <ChartContainer title="Force par matière (intervalle moyen en jours)">
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={stats.strengthBySubject} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" />
-              <YAxis type="category" dataKey="name" width={80} />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis type="number" tick={{ fill: 'var(--text-secondary)' }} />
+              <YAxis type="category" dataKey="name" width={80} tick={{ fill: 'var(--text-secondary)' }} />
               <Tooltip />
               <Legend />
               <Bar dataKey="force" fill="#82ca9d" />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </ChartContainer>
 
-        <div className={styles.chartContainer}>
-          <h3>Répartition des cartes</h3>
+        <ChartContainer title="Répartition des cartes">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie data={stats.cardDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} fill="#8884d8" label>
@@ -125,19 +123,18 @@ const Dashboard = () => {
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </ChartContainer>
 
-        <div className={styles.chartContainer}>
-          <h3>Cartes difficiles (Top 5)</h3>
-          <ul className={styles.difficultCardsList}>
+        <ChartContainer title="Cartes difficiles (Top 5)">
+          <ul className="space-y-3">
             {stats.difficultCards.map(card => (
-              <li key={card.id}>
-                <span className={styles.question}>{card.question}</span>
-                <span className={styles.subject}>{card.subject}</span>
+              <li key={card.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded-md">
+                <span className="text-sm font-medium text-gray-800 dark:text-white">{card.question}</span>
+                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{card.subject}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </ChartContainer>
       </div>
     </div>
   );
