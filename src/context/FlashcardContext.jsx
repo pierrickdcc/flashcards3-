@@ -1,10 +1,12 @@
+
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../supabaseClient';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import toast from 'react-hot-toast';
-import { DEFAULT_SUBJECT } from '../constants/app';
+import { DEFAULT_SUBJECT, VIEW_MODE } from '../constants/app';
 import { calculateNextReview } from '../utils/spacedRepetition';
+import { useDebouncedCallback } from 'use-debounce';
 
 const FlashcardContext = createContext();
 
@@ -25,9 +27,14 @@ export const FlashcardProvider = ({ children }) => {
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
 
-  // Filter states
+  // Filter and view states
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState(VIEW_MODE.GRID);
+
+  const debouncedSetSearchTerm = useDebouncedCallback((value) => {
+    setSearchTerm(value);
+  }, 300);
 
 
   const cards = useLiveQuery(() => db.cards.toArray(), []);
@@ -538,6 +545,9 @@ const formatCardForSupabase = (card) => ({
     // Filters
     selectedSubject, setSelectedSubject,
     searchTerm, setSearchTerm,
+    // View
+    viewMode, setViewMode,
+    debouncedSetSearchTerm,
   };
 
   return (
