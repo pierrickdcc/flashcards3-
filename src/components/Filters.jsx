@@ -2,8 +2,11 @@ import React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { BookOpen, Table, BarChart, Trash2, BookCopy, Search } from 'lucide-react';
 import styles from './Filters.module.css';
+import { useFlashcard } from '../context/FlashcardContext';
 
-const Filters = ({ view, setView, selectedSubject, setSelectedSubject, subjects, onDeleteSubject, searchTerm, setSearchTerm }) => {
+const Filters = ({ view, setView, subjects, onDeleteSubject }) => {
+  const { selectedSubject, setSelectedSubject, searchTerm, setSearchTerm } = useFlashcard();
+
   const debouncedSearch = useDebouncedCallback((value) => {
     setSearchTerm(value);
   }, 300);

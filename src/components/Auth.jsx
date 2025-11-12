@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Auth as SupabaseAuth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../supabaseClient';
@@ -8,6 +8,12 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authView, setAuthView] = useState('sign_in');
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+  }, []);
 
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -64,7 +70,7 @@ const Auth = () => {
                 }
               }
             }}
-            theme="dark"
+            theme={theme}
             providers={[]}
             view={authView}
             onViewChange={setAuthView}

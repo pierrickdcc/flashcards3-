@@ -13,7 +13,7 @@ const CourseViewer = ({ course, onClose }) => {
       </div>
       <iframe
         srcDoc={course.content}
-        sandbox="allow-scripts"
+        sandbox="allow-styles"
         className={styles.iframe}
         title={course.title}
       />

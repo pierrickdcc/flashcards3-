@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateNextReview } from './FlashcardContext';
+import { calculateNextReview } from '../utils/spacedRepetition';
 
 describe('calculateNextReview', () => {
     it('should reset interval to 1 for quality < 3', () => {
