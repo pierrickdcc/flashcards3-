@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, useAnimation } from 'framer-motion';
 import { useFlashcard } from "../context/FlashcardContext";
-import { calculateNextReview } from '../utils/spacedRepetition';
 
 const ReviewMode = () => {
-  const { cardsToReview, reviewCard, setShowReviewMode } = useFlashcard();
+  const { getCardsToReview, reviewCard, setReviewMode } = useFlashcard();
+  const [cardsToReview, setCardsToReview] = useState(getCardsToReview());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [direction, setDirection] = useState(0);
@@ -20,8 +20,7 @@ const ReviewMode = () => {
   }, [currentIndex]);
 
   const handleAnswer = async (quality) => {
-    const nextCard = calculateNextReview(currentCard, quality);
-    await reviewCard(currentCard.id, nextCard);
+    await reviewCard(currentCard, quality);
     
     if (currentIndex < cardsToReview.length - 1) {
       setDirection(quality >= 3 ? 1 : -1);
@@ -35,7 +34,7 @@ const ReviewMode = () => {
       setDirection(0);
       controls.start({ x: 0, opacity: 1 });
     } else {
-      setShowReviewMode(false);
+      setReviewMode(false);
     }
   };
 
@@ -55,7 +54,7 @@ const ReviewMode = () => {
     <div className="fixed inset-0 bg-white dark:bg-gray-900 z-50 flex flex-col">
       <div className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between">
         <button
-          onClick={() => setShowReviewMode(false)}
+          onClick={() => setReviewMode(false)}
           className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

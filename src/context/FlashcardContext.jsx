@@ -4,36 +4,9 @@ import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import toast from 'react-hot-toast';
 import { DEFAULT_SUBJECT } from '../constants/app';
+import { calculateNextReview } from '../utils/spacedRepetition';
 
 const FlashcardContext = createContext();
-
-/**
- * Calculates the next review date for a flashcard based on user performance.
- * @param {number} quality - The quality of the review (0-5).
- * @param {number} interval - The current interval in days.
- * @param {number} easiness - The current easiness factor.
- * @returns {{interval: number, easiness: number, nextReview: string}} - The new interval, easiness factor, and next review date.
- */
-export const calculateNextReview = (quality, interval, easiness) => {
-  if (quality < 3) {
-    return { interval: 1, easiness, nextReview: new Date().toISOString() };
-  }
-
-  let newEasiness = easiness + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-  if (newEasiness < 1.3) newEasiness = 1.3;
-
-  let newInterval;
-  if (interval === 1) {
-    newInterval = 6;
-  } else {
-    newInterval = Math.ceil(interval * newEasiness);
-  }
-
-  const nextReview = new Date();
-  nextReview.setDate(nextReview.getDate() + newInterval);
-
-  return { interval: newInterval, easiness: newEasiness, nextReview: nextReview.toISOString() };
-};
 
 export const FlashcardProvider = ({ children }) => {
   const [session, setSession] = useState(null);
@@ -43,6 +16,19 @@ export const FlashcardProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+
+  // Modal states
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false);
+  const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
+  const [showAddCardModal, setShowAddCardModal] = useState(false);
+  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+
+  // Filter states
+  const [selectedSubject, setSelectedSubject] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+
 
   const cards = useLiveQuery(() => db.cards.toArray(), []);
   const subjects = useLiveQuery(() => db.subjects.toArray(), []);
@@ -166,21 +152,53 @@ export const FlashcardProvider = ({ children }) => {
   }, [session, workspaceId]);
 
   const syncToCloud = async () => {
-    if (!session || !isOnline || !workspaceId) return;
+    if (!session || !isOnline || !workspaceId || isSyncing) return;
 
     setIsSyncing(true);
     toast.loading('Synchronisation en cours...');
+
     try {
-      const { data: cloudCards, error: cardsError } = await supabase.from('flashcards').select('*').eq('workspace_id', workspaceId);
-      const { data: cloudSubjects, error: subjectsError } = await supabase.from('subjects').select('*').eq('workspace_id', workspaceId);
-      const { data: cloudCourses, error: coursesError } = await supabase.from('courses').select('*').eq('workspace_id', workspaceId);
+      // 1. Envoyer les modifications locales vers le cloud
+      const localUnsyncedCards = await db.cards.where('isSynced').equals(false).toArray();
+      const localUnsyncedSubjects = await db.subjects.where('isSynced').equals(false).toArray();
+      const localUnsyncedCourses = await db.courses.where('isSynced').equals(false).toArray();
+
+      if (localUnsyncedCards.length > 0) {
+        const { error } = await supabase.from('flashcards').upsert(localUnsyncedCards.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
+        if (error) throw error;
+      }
+      if (localUnsyncedSubjects.length > 0) {
+          const { error } = await supabase.from('subjects').upsert(localUnsyncedSubjects.map(s => ({...s, isSynced: undefined, id: s.id.startsWith('local_') ? undefined : s.id })));
+        if (error) throw error;
+      }
+      if (localUnsyncedCourses.length > 0) {
+          const { error } = await supabase.from('courses').upsert(localUnsyncedCourses.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
+        if (error) throw error;
+      }
+
+      // Marquer tout comme synchronisé localement après l'envoi réussi
+      await db.cards.where('isSynced').equals(false).modify({ isSynced: true });
+      await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
+      await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
+
+      // 2. Récupérer les données du cloud et fusionner
+      const lastSyncTime = localStorage.getItem('last_sync') || new Date(0).toISOString();
+
+      const { data: cloudCards, error: cardsError } = await supabase.from('flashcards').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
+      const { data: cloudSubjects, error: subjectsError } = await supabase.from('subjects').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
+      const { data: cloudCourses, error: coursesError } = await supabase.from('courses').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
 
       if (cardsError || subjectsError || coursesError) throw cardsError || subjectsError || coursesError;
 
+      // Suppression des éléments locaux qui ont été créés avec un ID temporaire
+      // et qui sont maintenant revenus du cloud avec un ID permanent.
+      const localCards = await db.cards.where('id').startsWith('local_').toArray();
+      if(localCards.length > 0) await db.cards.bulkDelete(localCards.map(c => c.id));
+
       await db.transaction('rw', db.cards, db.subjects, db.courses, async () => {
-        await db.cards.bulkPut(cloudCards);
-        await db.subjects.bulkPut(cloudSubjects);
-        await db.courses.bulkPut(cloudCourses);
+        if (cloudCards.length > 0) await db.cards.bulkPut(cloudCards.map(c => ({...c, isSynced: true})));
+        if (cloudSubjects.length > 0) await db.subjects.bulkPut(cloudSubjects.map(c => ({...c, isSynced: true})));
+        if (cloudCourses.length > 0) await db.courses.bulkPut(cloudCourses.map(c => ({...c, isSynced: true})));
       });
 
       const now = new Date();
@@ -192,7 +210,7 @@ export const FlashcardProvider = ({ children }) => {
     } catch (err) {
       console.error('Erreur de synchronisation:', err);
       toast.dismiss();
-      toast.error('Erreur de synchronisation.');
+      toast.error(`Erreur de synchronisation: ${err.message}`);
     } finally {
       setIsSyncing(false);
     }
@@ -249,7 +267,8 @@ const formatCardForSupabase = (card) => ({
         reviewCount: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        workspace_id: workspaceId
+        workspace_id: workspaceId,
+        isSynced: false
       };
       await db.cards.add(newCard);
       toast.success('Carte ajoutée hors ligne !');
@@ -262,31 +281,37 @@ const formatCardForSupabase = (card) => ({
    * @param {object} updates - The updates to apply to the card.
    */
   const updateCardWithSync = async (id, updates) => {
-    const updatedCard = { ...updates, updated_at: new Date().toISOString() };
-    await db.cards.update(id, updatedCard);
-    toast.success('Carte mise à jour !');
-
-    if (supabase && isOnline && workspaceId) {
+    if (isOnline) {
+      const updatedCard = { ...updates, updated_at: new Date().toISOString() };
+      await db.cards.update(id, updatedCard);
+      toast.success('Carte mise à jour !');
       try {
         await supabase.from('flashcards').update({ ...updatedCard }).eq('id', id).eq('workspace_id', workspaceId);
       } catch (err) {
         console.error('Erreur update cloud:', err);
         toast.error('Erreur de synchronisation.');
       }
+    } else {
+      const updatedCard = { ...updates, updated_at: new Date().toISOString(), isSynced: false };
+      await db.cards.update(id, updatedCard);
+      toast.success('Carte mise à jour hors ligne !');
     }
   };
 
   const deleteCardWithSync = async (id) => {
+    if (!isOnline) {
+      toast.error("La suppression n'est pas disponible hors ligne.");
+      return;
+    }
     await db.cards.delete(id);
     toast.success('Carte supprimée !');
-
-    if (supabase && isOnline && workspaceId) {
-      try {
-        await supabase.from('flashcards').delete().eq('id', id).eq('workspace_id', workspaceId);
-      } catch (err) {
-        console.error('Erreur delete cloud:', err);
-        toast.error('Erreur de synchronisation.');
-      }
+    try {
+      await supabase.from('flashcards').delete().eq('id', id).eq('workspace_id', workspaceId);
+    } catch (err) {
+      console.error('Erreur delete cloud:', err);
+      toast.error('Erreur de synchronisation.');
+      // Si la suppression cloud échoue, il faudrait idéalement annuler la suppression locale
+      // ou la marquer pour une nouvelle tentative. Pour l'instant, on se contente de notifier.
     }
   };
 
@@ -324,8 +349,14 @@ const formatCardForSupabase = (card) => ({
     }
   };
 
+  const normalizeSubjectName = (name) => {
+    if (!name) return '';
+    const trimmed = name.trim();
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  };
+
   const addSubject = async (newSubject) => {
-  const normalizedName = newSubject.trim().toLowerCase();
+  const normalizedName = normalizeSubjectName(newSubject);
   if (!normalizedName) return;
 
   // Votre vérification "equalsIgnoreCase" est déjà correcte
@@ -357,10 +388,11 @@ const formatCardForSupabase = (card) => ({
       }
     } else {
       const newSubjectOffline = {
-        name: newSubject.trim(),
+        name: normalizedName,
         workspace_id: workspaceId,
         created_at: new Date().toISOString(),
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        isSynced: false
       };
       await db.subjects.add(newSubjectOffline);
       toast.success('Matière ajoutée hors ligne !');
@@ -456,7 +488,8 @@ const formatCardForSupabase = (card) => ({
         ...course,
         id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         created_at: new Date().toISOString(),
-        workspace_id: workspaceId
+        workspace_id: workspaceId,
+        isSynced: false
       };
       await db.courses.add(newCourse);
       toast.success('Cours ajouté hors ligne !');
@@ -469,11 +502,42 @@ const formatCardForSupabase = (card) => ({
     window.location.reload();
   };
 
+  const getCardsToReview = (subject = 'all') => {
+    if (!cards) return [];
+    const now = new Date();
+    let filtered = cards.filter(c => new Date(c.nextReview) <= now);
+    if (subject !== 'all') {
+      filtered = filtered.filter(c => c.subject === subject);
+    }
+    return filtered.sort(() => Math.random() - 0.5);
+  };
+
+  const startReview = (subject = 'all') => {
+    const toReview = getCardsToReview(subject);
+    if (toReview.length > 0) {
+      setReviewMode(true);
+    } else {
+      toast.error("Aucune carte à réviser !");
+    }
+  };
+
   const value = {
     session, cards, subjects, courses, darkMode, setDarkMode, workspaceId, setWorkspaceId, isConfigured, isOnline,
     isSyncing, lastSync, syncToCloud, updateCardWithSync, deleteCardWithSync, handleBulkAdd, addSubject, reviewCard, addCard,
     handleDeleteCardsOfSubject, handleReassignCardsOfSubject, addCourse,
     signOut,
+    // Modals
+    showConfigModal, setShowConfigModal,
+    showBulkAddModal, setShowBulkAddModal,
+    showAddSubjectModal, setShowAddSubjectModal,
+    showAddCardModal, setShowAddCardModal,
+    showAddCourseModal, setShowAddCourseModal,
+    // Review
+    reviewMode, setReviewMode,
+    getCardsToReview, startReview,
+    // Filters
+    selectedSubject, setSelectedSubject,
+    searchTerm, setSearchTerm,
   };
 
   return (

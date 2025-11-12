@@ -1,8 +1,11 @@
 import React from 'react';
 import { Brain, Plus, FolderPlus, FilePlus, BookPlus } from 'lucide-react';
 import styles from './Actions.module.css';
+import { useFlashcard } from '../context/FlashcardContext';
 
-const Actions = ({ startReview, cardsToReviewCount, setShowBulkModal, setShowAddSubjectModal, setShowAddCardModal, setShowAddCourseModal }) => {
+const Actions = ({ startReview, cardsToReviewCount }) => {
+  const { setShowBulkAddModal, setShowAddSubjectModal, setShowAddCardModal, setShowAddCourseModal } = useFlashcard();
+
   return (
     <div className={styles.actionsContainer}>
       <button
@@ -29,7 +32,7 @@ const Actions = ({ startReview, cardsToReviewCount, setShowBulkModal, setShowAdd
       </button>
 
       <button
-        onClick={() => setShowBulkModal(true)}
+        onClick={() => setShowBulkAddModal(true)}
         className={`${styles.button} ${styles.secondaryButton}`}
       >
         <Plus size={20} /> Ajout en masse

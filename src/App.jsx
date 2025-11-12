@@ -35,25 +35,28 @@ const FlashcardsPWA = () => {
     setWorkspaceId,
     workspaceId,
     isConfigured,
-    signOut
+    signOut,
+    // Modals
+    showConfigModal, setShowConfigModal,
+    showBulkAddModal: showBulkModal, setShowBulkAddModal: setShowBulkModal,
+    showAddSubjectModal, setShowAddSubjectModal,
+    showAddCardModal, setShowAddCardModal,
+    showAddCourseModal, setShowAddCourseModal,
+    // Review
+    reviewMode,
+    getCardsToReview,
+    startReview,
+    // Filters
+    selectedSubject,
+    searchTerm
   } = useFlashcard();
 
   // --- LOCAL UI STATE ---
   const [view, setView] = useState('courses');
-  const [selectedSubject, setSelectedSubject] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [reviewMode, setReviewMode] = useState(false);
-  const [currentCard, setCurrentCard] = useState(null);
-  const [showAnswer, setShowAnswer] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
 
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
-  const [showAddCardModal, setShowAddCardModal] = useState(false);
-  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [showDeleteSubjectModal, setShowDeleteSubjectModal] = useState(false);
   const [subjectToDelete, setSubjectToDelete] = useState(null);
-  const [showConfigModal, setShowConfigModal] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
 
@@ -76,38 +79,6 @@ const FlashcardsPWA = () => {
     setSelectedSubject(DEFAULT_SUBJECT);
   };
 
-  const getCardsToReview = () => {
-    if (!cards) return [];
-    const now = new Date();
-    let filtered = cards.filter(c => new Date(c.nextReview) <= now);
-    if (selectedSubject !== 'all') {
-      filtered = filtered.filter(c => c.subject === selectedSubject);
-    }
-    return filtered.sort(() => Math.random() - 0.5);
-  };
-
-  const startReview = () => {
-    const toReview = getCardsToReview();
-    if (toReview.length > 0) {
-      setCurrentCard(toReview[0]);
-      setReviewMode(true);
-      setShowAnswer(false);
-    }
-  };
-
-  const handleReviewCard = (quality) => {
-    reviewCard(currentCard, quality);
-    setShowAnswer(false);
-
-    const remaining = getCardsToReview().filter(c => c.id !== currentCard.id);
-    if (remaining.length > 0) {
-      setCurrentCard(remaining[0]);
-    } else {
-      setReviewMode(false);
-      setCurrentCard(null);
-    }
-  };
-
   const filteredCards = useMemo(() => {
     if (!cards?.length) return [];
 
@@ -123,7 +94,7 @@ const FlashcardsPWA = () => {
     });
   }, [cards, selectedSubject, searchTerm]);
 
-  const cardsToReview = getCardsToReview();
+  const cardsToReview = useMemo(() => getCardsToReview(selectedSubject), [cards, selectedSubject]);
   const stats = {
     total: cards?.length || 0,
     toReview: cardsToReview.length,
@@ -143,17 +114,8 @@ const FlashcardsPWA = () => {
     );
   }
 
-  if (reviewMode && currentCard) {
-    return (
-      <ReviewMode
-        currentCard={currentCard}
-        cardsToReview={cardsToReview}
-        setReviewMode={setReviewMode}
-        showAnswer={showAnswer}
-        setShowAnswer={setShowAnswer}
-        reviewCard={handleReviewCard}
-      />
-    );
+  if (reviewMode) {
+    return <ReviewMode />;
   }
 
   const handleSignOut = () => {
@@ -164,7 +126,6 @@ const FlashcardsPWA = () => {
     <div>
       <Toaster />
       <Header
-        setShowConfigModal={setShowConfigModal}
         isConfigured={isConfigured}
         setShowSignOutModal={setShowSignOutModal}
       />
@@ -173,23 +134,15 @@ const FlashcardsPWA = () => {
         <Stats stats={stats} />
         
         <Actions
-          startReview={startReview}
+          startReview={() => startReview(selectedSubject)}
           cardsToReviewCount={cardsToReview.length}
-          setShowBulkModal={setShowBulkModal}
-          setShowAddSubjectModal={setShowAddSubjectModal}
-          setShowAddCardModal={setShowAddCardModal}
-          setShowAddCourseModal={setShowAddCourseModal}
         />
         
         <Filters
           view={view}
           setView={setView}
-          selectedSubject={selectedSubject}
-          setSelectedSubject={setSelectedSubject}
           subjects={subjects || []}
           onDeleteSubject={handleDeleteSubject}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
         />
 
         {view === 'courses' && (
