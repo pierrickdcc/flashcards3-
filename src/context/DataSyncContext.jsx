@@ -4,73 +4,26 @@ import { supabase } from '../supabaseClient';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import toast from 'react-hot-toast';
-import { DEFAULT_SUBJECT, VIEW_MODE } from '../constants/app';
+import { DEFAULT_SUBJECT, TABLE_NAMES, LOCAL_STORAGE_KEYS } from '../constants/app';
 import { calculateNextReview } from '../utils/spacedRepetition';
-import { useDebouncedCallback } from 'use-debounce';
+import { useAuth } from './AuthContext';
 
-const FlashcardContext = createContext();
+const DataSyncContext = createContext();
 
-export const FlashcardProvider = ({ children }) => {
-  const [session, setSession] = useState(null);
-  const [darkMode, setDarkMode] = useState(true);
-  const [workspaceId, setWorkspaceId] = useState('');
-  const [isConfigured, setIsConfigured] = useState(false);
+export const DataSyncProvider = ({ children }) => {
+  const { session, workspaceId, isConfigured } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
-
-  // Modal states
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showBulkAddModal, setShowBulkAddModal] = useState(false);
-  const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
-  const [showAddCardModal, setShowAddCardModal] = useState(false);
-  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
-  const [reviewMode, setReviewMode] = useState(false);
-
-  // Filter and view states
-  const [selectedSubject, setSelectedSubject] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState(VIEW_MODE.GRID);
-
-  const debouncedSetSearchTerm = useDebouncedCallback((value) => {
-    setSearchTerm(value);
-  }, 300);
-
 
   const cards = useLiveQuery(() => db.cards.toArray(), []);
   const subjects = useLiveQuery(() => db.subjects.toArray(), []);
   const courses = useLiveQuery(() => db.courses.toArray(), []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
-
-    return () => subscription?.unsubscribe()
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-    document.body.className = darkMode ? 'dark' : 'light';
-  }, [darkMode]);
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      setDarkMode(savedTheme === 'dark');
-    }
-    const savedLastSync = localStorage.getItem('last_sync');
+    const savedLastSync = localStorage.getItem(LOCAL_STORAGE_KEYS.LAST_SYNC);
     if (savedLastSync) {
       setLastSync(new Date(savedLastSync));
-    }
-    const savedWorkspace = localStorage.getItem('workspace_id');
-    if (savedWorkspace) {
-      setWorkspaceId(savedWorkspace);
-      setIsConfigured(true);
     }
   }, []);
 
@@ -102,13 +55,13 @@ export const FlashcardProvider = ({ children }) => {
       let dbTable;
 
       switch (table) {
-        case 'flashcards':
+        case TABLE_NAMES.CARDS:
           dbTable = db.cards;
           break;
-        case 'subjects':
+        case TABLE_NAMES.SUBJECTS:
           dbTable = db.subjects;
           break;
-        case 'courses':
+        case TABLE_NAMES.COURSES:
           dbTable = db.courses;
           break;
         default:
@@ -165,65 +118,103 @@ export const FlashcardProvider = ({ children }) => {
     toast.loading('Synchronisation en cours...');
 
     try {
-      // 1. Envoyer les modifications locales vers le cloud
+      const lastSyncTime = localStorage.getItem(LOCAL_STORAGE_KEYS.LAST_SYNC) || new Date(0).toISOString();
+
+      const { data: cloudCards, error: cardsError } = await supabase.from(TABLE_NAMES.CARDS).select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
+      const { data: cloudSubjects, error: subjectsError } = await supabase.from(TABLE_NAMES.SUBJECTS).select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
+      const { data: cloudCourses, error: coursesError } = await supabase.from(TABLE_NAMES.COURSES).select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
+
+      if (cardsError || subjectsError || coursesError) {
+        throw cardsError || subjectsError || coursesError;
+      }
+
+      await db.transaction('rw', db.cards, db.subjects, db.courses, async () => {
+        if (cloudCards.length > 0) {
+            const formattedCards = cloudCards.map(formatCardFromSupabase);
+            const cloudCardIds = formattedCards.map(c => c.id);
+            const localCards = await db.cards.where('id').anyOf(cloudCardIds).toArray();
+            const localCardMap = new Map(localCards.map(c => [c.id, c]));
+            const cardsToUpdate = [];
+
+            for (const cloudCard of formattedCards) {
+                const localCard = localCardMap.get(cloudCard.id);
+                if (!localCard || new Date(cloudCard.updatedAt) > new Date(localCard.updatedAt)) {
+                    cardsToUpdate.push({ ...cloudCard, isSynced: true });
+                }
+            }
+            if (cardsToUpdate.length > 0) await db.cards.bulkPut(cardsToUpdate);
+        }
+
+        if (cloudSubjects.length > 0) {
+            const formattedSubjects = cloudSubjects.map(formatSubjectFromSupabase);
+            const cloudSubjectIds = formattedSubjects.map(s => s.id);
+            const localSubjects = await db.subjects.where('id').anyOf(cloudSubjectIds).toArray();
+            const localSubjectMap = new Map(localSubjects.map(s => [s.id, s]));
+            const subjectsToUpdate = [];
+
+            for (const cloudSubject of formattedSubjects) {
+                const localSubject = localSubjectMap.get(cloudSubject.id);
+                if (!localSubject || new Date(cloudSubject.updatedAt) > new Date(localSubject.updatedAt)) {
+                    subjectsToUpdate.push({ ...cloudSubject, isSynced: true });
+                }
+            }
+            if (subjectsToUpdate.length > 0) await db.subjects.bulkPut(subjectsToUpdate);
+        }
+
+        if (cloudCourses.length > 0) {
+            const formattedCourses = cloudCourses.map(formatCourseFromSupabase);
+            const cloudCourseIds = formattedCourses.map(c => c.id);
+            const localCourses = await db.courses.where('id').anyOf(cloudCourseIds).toArray();
+            const localCourseMap = new Map(localCourses.map(c => [c.id, c]));
+            const coursesToUpdate = [];
+
+            for (const cloudCourse of formattedCourses) {
+                const localCourse = localCourseMap.get(cloudCourse.id);
+                if (!localCourse || new Date(cloudCourse.updatedAt) > new Date(localCourse.updatedAt)) {
+                    coursesToUpdate.push({ ...cloudCourse, isSynced: true });
+                }
+            }
+            if (coursesToUpdate.length > 0) await db.courses.bulkPut(coursesToUpdate);
+        }
+    });
+      const localCardsWithTempId = await db.cards.where('id').startsWith('local_').toArray();
+      if(localCardsWithTempId.length > 0) await db.cards.bulkDelete(localCardsWithTempId.map(c => c.id));
+
       const localUnsyncedCards = await db.cards.where('isSynced').equals(false).toArray();
       const localUnsyncedSubjects = await db.subjects.where('isSynced').equals(false).toArray();
       const localUnsyncedCourses = await db.courses.where('isSynced').equals(false).toArray();
 
       if (localUnsyncedCards.length > 0) {
-        const { error } = await supabase.from('flashcards').upsert(localUnsyncedCards.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
+        const { error } = await supabase.from(TABLE_NAMES.CARDS).upsert(localUnsyncedCards.map(formatCardForSupabase));
         if (error) throw error;
+        await db.cards.where('isSynced').equals(false).modify({ isSynced: true });
       }
       if (localUnsyncedSubjects.length > 0) {
-          const { error } = await supabase.from('subjects').upsert(localUnsyncedSubjects.map(s => ({...s, isSynced: undefined, id: s.id.startsWith('local_') ? undefined : s.id })));
+        const { error } = await supabase.from(TABLE_NAMES.SUBJECTS).upsert(localUnsyncedSubjects.map(formatSubjectForSupabase));
         if (error) throw error;
+        await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
       }
       if (localUnsyncedCourses.length > 0) {
-          const { error } = await supabase.from('courses').upsert(localUnsyncedCourses.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
+        const { error } = await supabase.from(TABLE_NAMES.COURSES).upsert(localUnsyncedCourses.map(formatCourseForSupabase));
         if (error) throw error;
+        await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
       }
 
-      // Marquer tout comme synchronisé localement après l'envoi réussi
-      await db.cards.where('isSynced').equals(false).modify({ isSynced: true });
-      await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
-      await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
-
-      // 2. Traiter les suppressions en attente
       const pendingDeletions = await db.deletionsPending.toArray();
       if (pendingDeletions.length > 0) {
-        for (const deletion of pendingDeletions) {
+        await Promise.all(pendingDeletions.map(async (deletion) => {
           const { error } = await supabase.from(deletion.tableName).delete().eq('id', deletion.id);
-          if (error) {
+          if (error && error.code !== 'PGRST204') {
             console.error(`Erreur lors de la suppression de ${deletion.id} de ${deletion.tableName}:`, error);
           } else {
             await db.deletionsPending.delete(deletion.id);
           }
-        }
+        }));
       }
-
-      // 3. Récupérer les données du cloud et fusionner
-      const lastSyncTime = localStorage.getItem('last_sync') || new Date(0).toISOString();
-
-      const { data: cloudCards, error: cardsError } = await supabase.from('flashcards').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
-      const { data: cloudSubjects, error: subjectsError } = await supabase.from('subjects').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
-      const { data: cloudCourses, error: coursesError } = await supabase.from('courses').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
-
-      if (cardsError || subjectsError || coursesError) throw cardsError || subjectsError || coursesError;
-
-      // Suppression des éléments locaux qui ont été créés avec un ID temporaire
-      // et qui sont maintenant revenus du cloud avec un ID permanent.
-      const localCards = await db.cards.where('id').startsWith('local_').toArray();
-      if(localCards.length > 0) await db.cards.bulkDelete(localCards.map(c => c.id));
-
-      await db.transaction('rw', db.cards, db.subjects, db.courses, async () => {
-        if (cloudCards.length > 0) await db.cards.bulkPut(cloudCards.map(c => ({...c, isSynced: true})));
-        if (cloudSubjects.length > 0) await db.subjects.bulkPut(cloudSubjects.map(c => ({...c, isSynced: true})));
-        if (cloudCourses.length > 0) await db.courses.bulkPut(cloudCourses.map(c => ({...c, isSynced: true})));
-      });
 
       const now = new Date();
       setLastSync(now);
-      localStorage.setItem('last_sync', now.toISOString());
+      localStorage.setItem(LOCAL_STORAGE_KEYS.LAST_SYNC, now.toISOString());
       toast.dismiss();
       toast.success('Synchronisation terminée !');
 
@@ -235,24 +226,48 @@ export const FlashcardProvider = ({ children }) => {
       setIsSyncing(false);
     }
   };
-  // Adapter les noms de colonnes entre Supabase (snake_case) et local (camelCase)
 const formatCardFromSupabase = (card) => ({
   ...card,
-  nextReview: card.next_review, // Conversion
+  nextReview: card.next_review,
   easinessFactor: card.easiness_factor,
   updatedAt: card.updated_at
 });
 
 const formatCardForSupabase = (card) => ({
   ...card,
-  next_review: card.nextReview, // Conversion inverse
+  next_review: card.nextReview,
   easiness_factor: card.easinessFactor,
-  user_id: session.user.id // IMPORTANT: ajouter user_id
+  updated_at: card.updatedAt,
+  user_id: session.user.id,
+  workspace_id: card.workspace_id,
 });
-  /**
-   * Adds a new flashcard to the database.
-   * @param {{question: string, answer: string, subject: string}} card - The card to add.
-   */
+
+const formatSubjectFromSupabase = (subject) => ({
+  ...subject,
+  updatedAt: subject.updated_at,
+  workspace_id: subject.workspace_id,
+});
+
+const formatSubjectForSupabase = (subject) => ({
+  ...subject,
+  updated_at: subject.updatedAt,
+  workspace_id: subject.workspace_id,
+  user_id: session.user.id,
+});
+
+const formatCourseFromSupabase = (course) => ({
+  ...course,
+  updatedAt: course.updated_at,
+  workspace_id: course.workspace_id,
+});
+
+const formatCourseForSupabase = (course) => ({
+  ...course,
+  updated_at: course.updatedAt,
+  workspace_id: course.workspace_id,
+  user_id: session.user.id,
+});
+
   const addCard = async (card) => {
     const newCard = {
       ...card,
@@ -272,11 +287,6 @@ const formatCardForSupabase = (card) => ({
     }
   };
 
-  /**
-   * Updates a flashcard in the database.
-   * @param {string} id - The ID of the card to update.
-   * @param {object} updates - The updates to apply to the card.
-   */
   const updateCardWithSync = async (id, updates) => {
     const updatedCard = { ...updates, updated_at: new Date().toISOString(), isSynced: false };
     await db.cards.update(id, updatedCard);
@@ -305,7 +315,7 @@ const formatCardForSupabase = (card) => ({
           id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${idx}`,
           question: parts[0].trim(),
           answer: parts[1].trim(),
-          subject: parts[2].trim(),
+          subject: normalizeSubjectName(parts[2].trim()),
           nextReview: new Date().toISOString(),
           interval: 1,
           reviewCount: 0,
@@ -399,7 +409,6 @@ const formatCardForSupabase = (card) => ({
     }
   };
 
-
   const reviewCard = async (currentCard, quality) => {
     const { nextReview, interval, easiness } = calculateNextReview(quality, currentCard.interval || 1, currentCard.easiness || 2.5);
     const updated = {
@@ -436,6 +445,7 @@ const formatCardForSupabase = (card) => ({
   };
 
   const signOut = async () => {
+    await syncToCloud();
     await db.delete();
     await supabase.auth.signOut();
     window.location.reload();
@@ -461,38 +471,23 @@ const formatCardForSupabase = (card) => ({
   };
 
   const value = {
-    session, cards, subjects, courses, darkMode, setDarkMode, workspaceId, setWorkspaceId, isConfigured, isOnline,
-    isSyncing, lastSync, syncToCloud, updateCardWithSync, deleteCardWithSync, handleBulkAdd, addSubject, reviewCard, addCard,
-    handleDeleteCardsOfSubject, handleReassignCardsOfSubject, addCourse,
-    signOut,
-    // Modals
-    showConfigModal, setShowConfigModal,
-    showBulkAddModal, setShowBulkAddModal,
-    showAddSubjectModal, setShowAddSubjectModal,
-    showAddCardModal, setShowAddCardModal,
-    showAddCourseModal, setShowAddCourseModal,
-    // Review
-    reviewMode, setReviewMode,
-    getCardsToReview, startReview,
-    // Filters
-    selectedSubject, setSelectedSubject,
-    searchTerm, setSearchTerm,
-    // View
-    viewMode, setViewMode,
-    debouncedSetSearchTerm,
+    cards, subjects, courses, isOnline, isSyncing, lastSync, syncToCloud,
+    addCard, updateCardWithSync, deleteCardWithSync, handleBulkAdd, addSubject,
+    handleDeleteCardsOfSubject, handleReassignCardsOfSubject, reviewCard, addCourse,
+    signOut, getCardsToReview, startReview,
   };
 
   return (
-    <FlashcardContext.Provider value={value}>
+    <DataSyncContext.Provider value={value}>
       {children}
-    </FlashcardContext.Provider>
+    </DataSyncContext.Provider>
   );
 };
 
-export const useFlashcard = () => {
-  const context = useContext(FlashcardContext);
+export const useDataSync = () => {
+  const context = useContext(DataSyncContext);
   if (context === undefined) {
-    throw new Error('useFlashcard must be used within a FlashcardProvider');
+    throw new Error('useDataSync must be used within a DataSyncProvider');
   }
   return context;
 };

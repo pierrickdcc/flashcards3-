@@ -1,21 +1,22 @@
 
 import React from 'react';
-import { useFlashcard } from '../context/FlashcardContext';
+import { useUIState } from '../context/UIStateContext';
+import { useDataSync } from '../context/DataSyncContext';
 import { Search, LayoutGrid, List } from 'lucide-react';
 import { VIEW_MODE } from '../constants/app';
 
 // PAS D'IMPORT DE .module.css
 
-const Filters = () => {
+const Filters = ({ view, setView }) => {
+  const { subjects } = useDataSync();
   const {
-    subjects,
     selectedSubject,
     setSelectedSubject,
     searchTerm,
     debouncedSetSearchTerm,
     viewMode,
     setViewMode,
-  } = useFlashcard();
+  } = useUIState();
 
   const handleSearchChange = (e) => {
     debouncedSetSearchTerm(e.target.value);

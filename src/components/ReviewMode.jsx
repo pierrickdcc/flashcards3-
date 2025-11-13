@@ -1,10 +1,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion, useAnimation } from 'framer-motion';
-import { useFlashcard } from "../context/FlashcardContext";
+import { useDataSync } from '../context/DataSyncContext';
+import { useUIState } from '../context/UIStateContext';
 
 const ReviewMode = () => {
-  const { getCardsToReview, reviewCard, setReviewMode, selectedSubject } = useFlashcard();
+  const { getCardsToReview, reviewCard } = useDataSync();
+  const { setReviewMode, selectedSubject } = useUIState();
   const [cardsToReview, setCardsToReview] = useState(getCardsToReview(selectedSubject));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);

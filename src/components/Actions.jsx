@@ -1,10 +1,10 @@
 
 import React from 'react';
 import { Brain, Plus, FolderPlus, FilePlus, BookPlus } from 'lucide-react';
-import { useFlashcard } from '../context/FlashcardContext';
+import { useUIState } from '../context/UIStateContext';
 
 const Actions = ({ startReview, cardsToReviewCount }) => {
-  const { setShowBulkAddModal, setShowAddSubjectModal, setShowAddCardModal, setShowAddCourseModal } = useFlashcard();
+  const { setShowBulkAddModal, setShowAddSubjectModal, setShowAddCardModal, setShowAddCourseModal } = useUIState();
 
   const baseButtonClass = "flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors duration-200";
   const reviewButtonClass = "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed";

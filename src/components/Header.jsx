@@ -1,16 +1,21 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useFlashcard } from "../context/FlashcardContext";
-import { useDebouncedCallback } from 'use-debounce';
+import { useAuth } from '../context/AuthContext';
+import { useUIState } from '../context/UIStateContext';
+import { useDataSync } from '../context/DataSyncContext';
 
 const Header = () => {
-  const { session, setShowConfigModal, setShowAddCardModal, setShowAddCourseModal, signOut, searchTerm, setSearchTerm } = useFlashcard();
+  const { session } = useAuth();
+  const { signOut } = useDataSync();
+  const {
+    setShowConfigModal,
+    setShowAddCardModal,
+    setShowAddCourseModal,
+    searchTerm,
+    debouncedSetSearchTerm,
+  } = useUIState();
   const [showMenu, setShowMenu] = useState(false);
-
-  const debouncedSetSearchTerm = useDebouncedCallback((value) => {
-    setSearchTerm(value);
-  }, 300);
 
   useEffect(() => {
     // Raccourcis clavier globaux

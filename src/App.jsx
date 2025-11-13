@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { useFlashcard } from './context/FlashcardContext';
+import { useAuth } from './context/AuthContext';
+import { useDataSync } from './context/DataSyncContext';
+import { useUIState } from './context/UIStateContext';
 import Auth from './components/Auth';
 import Header from './components/Header';
 import DeleteSubjectModal from './components/DeleteSubjectModal';
@@ -21,35 +23,36 @@ import SignOutConfirmationModal from './components/SignOutConfirmationModal';
 import { Toaster } from 'react-hot-toast';
 import { DEFAULT_SUBJECT } from './constants/app';
 
-const FlashcardsPWA = () => {
+const App = () => {
+  const { session, isConfigured } = useAuth();
   const {
-    session,
     cards,
     subjects,
     courses,
-    reviewCard,
     deleteCardWithSync,
     updateCardWithSync,
     handleDeleteCardsOfSubject,
     handleReassignCardsOfSubject,
-    setWorkspaceId,
-    workspaceId,
-    isConfigured,
     signOut,
-    // Modals
-    showConfigModal, setShowConfigModal,
-    showBulkAddModal: showBulkModal, setShowBulkAddModal: setShowBulkModal,
-    showAddSubjectModal, setShowAddSubjectModal,
-    showAddCardModal, setShowAddCardModal,
-    showAddCourseModal, setShowAddCourseModal,
-    // Review
-    reviewMode,
     getCardsToReview,
     startReview,
-    // Filters
+  } = useDataSync();
+  const {
+    showConfigModal,
+    setShowConfigModal,
+    showBulkAddModal: showBulkModal,
+    setShowBulkAddModal: setShowBulkModal,
+    showAddSubjectModal,
+    setShowAddSubjectModal,
+    showAddCardModal,
+    setShowAddCardModal,
+    showAddCourseModal,
+    setShowAddCourseModal,
+    reviewMode,
     selectedSubject,
-    searchTerm
-  } = useFlashcard();
+    setSelectedSubject,
+    searchTerm,
+  } = useUIState();
 
   // --- LOCAL UI STATE ---
   const [view, setView] = useState('courses');
@@ -215,4 +218,4 @@ const FlashcardsPWA = () => {
   );
 };
 
-export default FlashcardsPWA;
+export default App;

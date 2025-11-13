@@ -1,11 +1,11 @@
 // src/components/CourseList.jsx
 import React, { useMemo } from 'react';
-import { useFlashcard } from '../context/FlashcardContext';
+import { useDataSync } from '../context/DataSyncContext';
 import { motion } from 'framer-motion';
 import { DEFAULT_SUBJECT } from '../constants/app';
 
 const CourseList = ({ onCourseSelect }) => {
-  const { courses } = useFlashcard();
+  const { courses } = useDataSync();
 
   const containerVariants = {
     hidden: { opacity: 0 },
