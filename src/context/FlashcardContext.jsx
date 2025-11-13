@@ -188,7 +188,20 @@ export const FlashcardProvider = ({ children }) => {
       await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
       await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
 
-      // 2. Récupérer les données du cloud et fusionner
+      // 2. Traiter les suppressions en attente
+      const pendingDeletions = await db.deletionsPending.toArray();
+      if (pendingDeletions.length > 0) {
+        for (const deletion of pendingDeletions) {
+          const { error } = await supabase.from(deletion.tableName).delete().eq('id', deletion.id);
+          if (error) {
+            console.error(`Erreur lors de la suppression de ${deletion.id} de ${deletion.tableName}:`, error);
+          } else {
+            await db.deletionsPending.delete(deletion.id);
+          }
+        }
+      }
+
+      // 3. Récupérer les données du cloud et fusionner
       const lastSyncTime = localStorage.getItem('last_sync') || new Date(0).toISOString();
 
       const { data: cloudCards, error: cardsError } = await supabase.from('flashcards').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
@@ -241,44 +254,21 @@ const formatCardForSupabase = (card) => ({
    * @param {{question: string, answer: string, subject: string}} card - The card to add.
    */
   const addCard = async (card) => {
+    const newCard = {
+      ...card,
+      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      nextReview: new Date().toISOString(),
+      interval: 1,
+      reviewCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      workspace_id: workspaceId,
+      isSynced: false
+    };
+    await db.cards.add(newCard);
+    toast.success('Carte ajoutée !');
     if (isOnline) {
-      const cardForSupabase = {
-        ...card,
-        next_review: new Date().toISOString(),
-        interval: 1,
-        repetitions: 0,
-        updated_at: new Date().toISOString(),
-        workspace_id: workspaceId
-      };
-      try {
-        const { data, error } = await supabase.from('flashcards').insert(cardForSupabase).select().single();
-        if (error) {
-          console.error('Erreur Supabase:', error);
-          throw new Error(`Erreur ajout carte: ${error.message}`);
-        }
-        if (!data) {
-          throw new Error('Aucune donnée reçue de Supabase');
-        }
-        await db.cards.add(data);
-        toast.success('Carte ajoutée !');
-      } catch (err) {
-        console.error('Erreur add card cloud:', err);
-        toast.error("L'ajout de la carte a échoué.");
-      }
-    } else {
-      const newCard = {
-        ...card,
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        nextReview: new Date().toISOString(),
-        interval: 1,
-        reviewCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        workspace_id: workspaceId,
-        isSynced: false
-      };
-      await db.cards.add(newCard);
-      toast.success('Carte ajoutée hors ligne !');
+      syncToCloud();
     }
   };
 
@@ -306,19 +296,19 @@ const formatCardForSupabase = (card) => ({
   };
 
   const deleteCardWithSync = async (id) => {
-    if (!isOnline) {
-      toast.error("La suppression n'est pas disponible hors ligne.");
-      return;
-    }
     await db.cards.delete(id);
     toast.success('Carte supprimée !');
-    try {
-      await supabase.from('flashcards').delete().eq('id', id).eq('workspace_id', workspaceId);
-    } catch (err) {
-      console.error('Erreur delete cloud:', err);
-      toast.error('Erreur de synchronisation.');
-      // Si la suppression cloud échoue, il faudrait idéalement annuler la suppression locale
-      // ou la marquer pour une nouvelle tentative. Pour l'instant, on se contente de notifier.
+
+    if (isOnline) {
+      try {
+        await supabase.from('flashcards').delete().eq('id', id).eq('workspace_id', workspaceId);
+      } catch (err) {
+        console.error('Erreur delete cloud:', err);
+        toast.error('Erreur de synchronisation.');
+        await db.deletionsPending.add({ id, tableName: 'flashcards' });
+      }
+    } else {
+      await db.deletionsPending.add({ id, tableName: 'flashcards' });
     }
   };
 

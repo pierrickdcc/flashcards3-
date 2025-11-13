@@ -49,6 +49,13 @@ const ReviewMode = () => {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      setShowAnswer(true);
+    }
+  };
+
   if (!currentCard) {
     // This can happen if all cards are reviewed and the component hasn't been unmounted yet.
     // Or if there were no cards to review in the first place.
@@ -79,6 +86,7 @@ const ReviewMode = () => {
         <motion.div
           id="review-card"
           tabIndex={0}
+          onKeyDown={handleKeyDown}
           className="w-full max-w-2xl h-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none"
           drag="x"
           dragConstraints={{ left: -100, right: 100 }}
