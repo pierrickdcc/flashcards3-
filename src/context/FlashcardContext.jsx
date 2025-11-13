@@ -165,62 +165,112 @@ export const FlashcardProvider = ({ children }) => {
     toast.loading('Synchronisation en cours...');
 
     try {
-      // 1. Envoyer les modifications locales vers le cloud
-      const localUnsyncedCards = await db.cards.where('isSynced').equals(false).toArray();
-      const localUnsyncedSubjects = await db.subjects.where('isSynced').equals(false).toArray();
-      const localUnsyncedCourses = await db.courses.where('isSynced').equals(false).toArray();
-
-      if (localUnsyncedCards.length > 0) {
-        const { error } = await supabase.from('flashcards').upsert(localUnsyncedCards.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
-        if (error) throw error;
-      }
-      if (localUnsyncedSubjects.length > 0) {
-          const { error } = await supabase.from('subjects').upsert(localUnsyncedSubjects.map(s => ({...s, isSynced: undefined, id: s.id.startsWith('local_') ? undefined : s.id })));
-        if (error) throw error;
-      }
-      if (localUnsyncedCourses.length > 0) {
-          const { error } = await supabase.from('courses').upsert(localUnsyncedCourses.map(c => ({...c, isSynced: undefined, id: c.id.startsWith('local_') ? undefined : c.id })));
-        if (error) throw error;
-      }
-
-      // Marquer tout comme synchronisé localement après l'envoi réussi
-      await db.cards.where('isSynced').equals(false).modify({ isSynced: true });
-      await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
-      await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
-
-      // 2. Traiter les suppressions en attente
-      const pendingDeletions = await db.deletionsPending.toArray();
-      if (pendingDeletions.length > 0) {
-        for (const deletion of pendingDeletions) {
-          const { error } = await supabase.from(deletion.tableName).delete().eq('id', deletion.id);
-          if (error) {
-            console.error(`Erreur lors de la suppression de ${deletion.id} de ${deletion.tableName}:`, error);
-          } else {
-            await db.deletionsPending.delete(deletion.id);
-          }
-        }
-      }
-
-      // 3. Récupérer les données du cloud et fusionner
+      // Étape 1: PULL - Récupérer les données du cloud modifiées depuis la dernière synchro
       const lastSyncTime = localStorage.getItem('last_sync') || new Date(0).toISOString();
 
       const { data: cloudCards, error: cardsError } = await supabase.from('flashcards').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
       const { data: cloudSubjects, error: subjectsError } = await supabase.from('subjects').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
       const { data: cloudCourses, error: coursesError } = await supabase.from('courses').select('*').eq('workspace_id', workspaceId).gte('updated_at', lastSyncTime);
 
-      if (cardsError || subjectsError || coursesError) throw cardsError || subjectsError || coursesError;
+      if (cardsError || subjectsError || coursesError) {
+        throw cardsError || subjectsError || coursesError;
+      }
 
+      // Étape 2: MERGE - Fusionner les données du cloud avec les données locales
+      await db.transaction('rw', db.cards, db.subjects, db.courses, async () => {
+        // Logique de fusion pour les cartes
+        if (cloudCards.length > 0) {
+            const formattedCards = cloudCards.map(formatCardFromSupabase);
+            const cloudCardIds = formattedCards.map(c => c.id);
+            const localCards = await db.cards.where('id').anyOf(cloudCardIds).toArray();
+            const localCardMap = new Map(localCards.map(c => [c.id, c]));
+            const cardsToUpdate = [];
+
+            for (const cloudCard of formattedCards) {
+                const localCard = localCardMap.get(cloudCard.id);
+                if (!localCard || new Date(cloudCard.updatedAt) > new Date(localCard.updatedAt)) {
+                    cardsToUpdate.push({ ...cloudCard, isSynced: true });
+                }
+            }
+            if (cardsToUpdate.length > 0) await db.cards.bulkPut(cardsToUpdate);
+        }
+
+        // Logique de fusion pour les matières
+        if (cloudSubjects.length > 0) {
+            const formattedSubjects = cloudSubjects.map(formatSubjectFromSupabase);
+            const cloudSubjectIds = formattedSubjects.map(s => s.id);
+            const localSubjects = await db.subjects.where('id').anyOf(cloudSubjectIds).toArray();
+            const localSubjectMap = new Map(localSubjects.map(s => [s.id, s]));
+            const subjectsToUpdate = [];
+
+            for (const cloudSubject of formattedSubjects) {
+                const localSubject = localSubjectMap.get(cloudSubject.id);
+                if (!localSubject || new Date(cloudSubject.updatedAt) > new Date(localSubject.updatedAt)) {
+                    subjectsToUpdate.push({ ...cloudSubject, isSynced: true });
+                }
+            }
+            if (subjectsToUpdate.length > 0) await db.subjects.bulkPut(subjectsToUpdate);
+        }
+
+        // Logique de fusion pour les cours
+        if (cloudCourses.length > 0) {
+            const formattedCourses = cloudCourses.map(formatCourseFromSupabase);
+            const cloudCourseIds = formattedCourses.map(c => c.id);
+            const localCourses = await db.courses.where('id').anyOf(cloudCourseIds).toArray();
+            const localCourseMap = new Map(localCourses.map(c => [c.id, c]));
+            const coursesToUpdate = [];
+
+            for (const cloudCourse of formattedCourses) {
+                const localCourse = localCourseMap.get(cloudCourse.id);
+                if (!localCourse || new Date(cloudCourse.updatedAt) > new Date(localCourse.updatedAt)) {
+                    coursesToUpdate.push({ ...cloudCourse, isSynced: true });
+                }
+            }
+            if (coursesToUpdate.length > 0) await db.courses.bulkPut(coursesToUpdate);
+        }
+    });
       // Suppression des éléments locaux qui ont été créés avec un ID temporaire
       // et qui sont maintenant revenus du cloud avec un ID permanent.
-      const localCards = await db.cards.where('id').startsWith('local_').toArray();
-      if(localCards.length > 0) await db.cards.bulkDelete(localCards.map(c => c.id));
+      const localCardsWithTempId = await db.cards.where('id').startsWith('local_').toArray();
+      if(localCardsWithTempId.length > 0) await db.cards.bulkDelete(localCardsWithTempId.map(c => c.id));
 
-      await db.transaction('rw', db.cards, db.subjects, db.courses, async () => {
-        if (cloudCards.length > 0) await db.cards.bulkPut(cloudCards.map(c => ({...c, isSynced: true})));
-        if (cloudSubjects.length > 0) await db.subjects.bulkPut(cloudSubjects.map(c => ({...c, isSynced: true})));
-        if (cloudCourses.length > 0) await db.courses.bulkPut(cloudCourses.map(c => ({...c, isSynced: true})));
-      });
 
+      // Étape 3: PUSH - Envoyer les modifications locales restantes vers le cloud
+      const localUnsyncedCards = await db.cards.where('isSynced').equals(false).toArray();
+      const localUnsyncedSubjects = await db.subjects.where('isSynced').equals(false).toArray();
+      const localUnsyncedCourses = await db.courses.where('isSynced').equals(false).toArray();
+
+      if (localUnsyncedCards.length > 0) {
+        const { error } = await supabase.from('flashcards').upsert(localUnsyncedCards.map(formatCardForSupabase));
+        if (error) throw error;
+        await db.cards.where('isSynced').equals(false).modify({ isSynced: true });
+      }
+      if (localUnsyncedSubjects.length > 0) {
+        const { error } = await supabase.from('subjects').upsert(localUnsyncedSubjects.map(formatSubjectForSupabase));
+        if (error) throw error;
+        await db.subjects.where('isSynced').equals(false).modify({ isSynced: true });
+      }
+      if (localUnsyncedCourses.length > 0) {
+        const { error } = await supabase.from('courses').upsert(localUnsyncedCourses.map(formatCourseForSupabase));
+        if (error) throw error;
+        await db.courses.where('isSynced').equals(false).modify({ isSynced: true });
+      }
+
+      // Étape 4: DELETE - Traiter les suppressions en attente
+      const pendingDeletions = await db.deletionsPending.toArray();
+      if (pendingDeletions.length > 0) {
+        // Utiliser Promise.all pour paralléliser les suppressions
+        await Promise.all(pendingDeletions.map(async (deletion) => {
+          const { error } = await supabase.from(deletion.tableName).delete().eq('id', deletion.id);
+          if (error && error.code !== 'PGRST204') { // PGRST204: No rows found, already deleted
+            console.error(`Erreur lors de la suppression de ${deletion.id} de ${deletion.tableName}:`, error);
+          } else {
+            await db.deletionsPending.delete(deletion.id);
+          }
+        }));
+      }
+
+      // Finalisation de la synchronisation
       const now = new Date();
       setLastSync(now);
       localStorage.setItem('last_sync', now.toISOString());
@@ -245,9 +295,37 @@ const formatCardFromSupabase = (card) => ({
 
 const formatCardForSupabase = (card) => ({
   ...card,
-  next_review: card.nextReview, // Conversion inverse
+  next_review: card.nextReview,
   easiness_factor: card.easinessFactor,
-  user_id: session.user.id // IMPORTANT: ajouter user_id
+  updated_at: card.updatedAt,
+  user_id: session.user.id,
+  workspace_id: card.workspace_id,
+});
+
+const formatSubjectFromSupabase = (subject) => ({
+  ...subject,
+  updatedAt: subject.updated_at,
+  workspace_id: subject.workspace_id,
+});
+
+const formatSubjectForSupabase = (subject) => ({
+  ...subject,
+  updated_at: subject.updatedAt,
+  workspace_id: subject.workspace_id,
+  user_id: session.user.id,
+});
+
+const formatCourseFromSupabase = (course) => ({
+  ...course,
+  updatedAt: course.updated_at,
+  workspace_id: course.workspace_id,
+});
+
+const formatCourseForSupabase = (course) => ({
+  ...course,
+  updated_at: course.updatedAt,
+  workspace_id: course.workspace_id,
+  user_id: session.user.id,
 });
   /**
    * Adds a new flashcard to the database.
@@ -305,7 +383,7 @@ const formatCardForSupabase = (card) => ({
           id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${idx}`,
           question: parts[0].trim(),
           answer: parts[1].trim(),
-          subject: parts[2].trim(),
+          subject: normalizeSubjectName(parts[2].trim()),
           nextReview: new Date().toISOString(),
           interval: 1,
           reviewCount: 0,
