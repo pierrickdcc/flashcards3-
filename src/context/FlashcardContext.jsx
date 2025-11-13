@@ -278,37 +278,21 @@ const formatCardForSupabase = (card) => ({
    * @param {object} updates - The updates to apply to the card.
    */
   const updateCardWithSync = async (id, updates) => {
+    const updatedCard = { ...updates, updated_at: new Date().toISOString(), isSynced: false };
+    await db.cards.update(id, updatedCard);
+    toast.success('Carte mise à jour !');
     if (isOnline) {
-      const updatedCard = { ...updates, updated_at: new Date().toISOString() };
-      await db.cards.update(id, updatedCard);
-      toast.success('Carte mise à jour !');
-      try {
-        await supabase.from('flashcards').update({ ...updatedCard }).eq('id', id).eq('workspace_id', workspaceId);
-      } catch (err) {
-        console.error('Erreur update cloud:', err);
-        toast.error('Erreur de synchronisation.');
-      }
-    } else {
-      const updatedCard = { ...updates, updated_at: new Date().toISOString(), isSynced: false };
-      await db.cards.update(id, updatedCard);
-      toast.success('Carte mise à jour hors ligne !');
+      syncToCloud();
     }
   };
 
   const deleteCardWithSync = async (id) => {
     await db.cards.delete(id);
+    await db.deletionsPending.add({ id, tableName: 'flashcards' });
     toast.success('Carte supprimée !');
 
     if (isOnline) {
-      try {
-        await supabase.from('flashcards').delete().eq('id', id).eq('workspace_id', workspaceId);
-      } catch (err) {
-        console.error('Erreur delete cloud:', err);
-        toast.error('Erreur de synchronisation.');
-        await db.deletionsPending.add({ id, tableName: 'flashcards' });
-      }
-    } else {
-      await db.deletionsPending.add({ id, tableName: 'flashcards' });
+      syncToCloud();
     }
   };
 
@@ -327,22 +311,20 @@ const formatCardForSupabase = (card) => ({
           reviewCount: 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          workspace_id: workspaceId
+          workspace_id: workspaceId,
+          isSynced: false
         };
       }
       return null;
     }).filter(Boolean);
 
+    if (newCards.length === 0) return;
+
     await db.cards.bulkAdd(newCards);
     toast.success(`${newCards.length} cartes ajoutées !`);
 
-    if (supabase && isOnline && workspaceId && newCards.length > 0) {
-      try {
-        await supabase.from('flashcards').insert(newCards);
-      } catch (err) {
-        console.error('Erreur bulk add cloud:', err);
-        toast.error('Erreur de synchronisation.');
-      }
+    if (isOnline) {
+      syncToCloud();
     }
   };
 
@@ -353,79 +335,67 @@ const formatCardForSupabase = (card) => ({
   };
 
   const addSubject = async (newSubject) => {
-  const normalizedName = normalizeSubjectName(newSubject);
-  if (!normalizedName) return;
+    const normalizedName = normalizeSubjectName(newSubject);
+    if (!normalizedName) return;
 
-  // Votre vérification "equalsIgnoreCase" est déjà correcte
-  const existing = await db.subjects.where('name').equalsIgnoreCase(normalizedName).first();
-  if (existing) {
-    toast.error('Cette matière existe déjà.');
-    return;
-  }
+    const existing = await db.subjects.where('name').equalsIgnoreCase(normalizedName).first();
+    if (existing) {
+      toast.error('Cette matière existe déjà.');
+      return;
+    }
 
-  if (isOnline) {
-    const subjectForSupabase = {
-      name: normalizedName, // "normalizedName" sera maintenant toujours en minuscules
-      workspace_id: workspaceId
+    const newSubjectOffline = {
+      name: normalizedName,
+      workspace_id: workspaceId,
+      created_at: new Date().toISOString(),
+      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      isSynced: false
     };
-    try {
-        const { data, error } = await supabase.from('subjects').insert(subjectForSupabase).select().single();
-        if (error) {
-          console.error('Erreur Supabase:', error);
-          throw new Error(`Erreur ajout matière: ${error.message}`);
-        }
-        if (!data) {
-          throw new Error('Aucune donnée reçue de Supabase');
-        }
-        await db.subjects.add(data);
-        toast.success('Matière ajoutée !');
-      } catch (err) {
-        console.error('Erreur add subject cloud:', err);
-        toast.error("L'ajout de la matière a échoué.");
-      }
-    } else {
-      const newSubjectOffline = {
-        name: normalizedName,
-        workspace_id: workspaceId,
-        created_at: new Date().toISOString(),
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        isSynced: false
-      };
-      await db.subjects.add(newSubjectOffline);
-      toast.success('Matière ajoutée hors ligne !');
+
+    await db.subjects.add(newSubjectOffline);
+    toast.success('Matière ajoutée !');
+
+    if (isOnline) {
+      syncToCloud();
     }
   };
 
   const handleDeleteCardsOfSubject = async (subjectName) => {
-    await db.cards.where('subject').equalsIgnoreCase(subjectName).delete();
-    await db.subjects.where('name').equalsIgnoreCase(subjectName).delete();
+    const cardsToDelete = await db.cards.where('subject').equalsIgnoreCase(subjectName).toArray();
+    const subjectToDelete = await db.subjects.where('name').equalsIgnoreCase(subjectName).first();
+
+    if (subjectToDelete) {
+      await db.deletionsPending.add({ id: subjectToDelete.id, tableName: 'subjects' });
+      await db.subjects.delete(subjectToDelete.id);
+    }
+
+    if (cardsToDelete.length > 0) {
+      const deletions = cardsToDelete.map(c => ({ id: c.id, tableName: 'flashcards' }));
+      await db.deletionsPending.bulkAdd(deletions);
+      await db.cards.bulkDelete(cardsToDelete.map(c => c.id));
+    }
+
     toast.success(`Matière "${subjectName}" et toutes ses cartes supprimées.`);
 
-    if (supabase && isOnline && workspaceId) {
-      try {
-        await supabase.from('flashcards').delete().eq('workspace_id', workspaceId).eq('subject', subjectName);
-        await supabase.from('subjects').delete().eq('workspace_id', workspaceId).eq('name', subjectName);
-      } catch (err) {
-        console.error("Erreur suppression sujet/cartes cloud:", err);
-        toast.error('Erreur de synchronisation.');
-      }
+    if (isOnline) {
+      syncToCloud();
     }
   };
 
   const handleReassignCardsOfSubject = async (subjectName) => {
-    await db.cards.where('subject').equalsIgnoreCase(subjectName).modify({ subject: DEFAULT_SUBJECT });
-    await db.subjects.where('name').equalsIgnoreCase(subjectName).delete();
+    const subjectToDelete = await db.subjects.where('name').equalsIgnoreCase(subjectName).first();
+
+    await db.cards.where('subject').equalsIgnoreCase(subjectName).modify({ subject: DEFAULT_SUBJECT, isSynced: false });
+
+    if (subjectToDelete) {
+      await db.deletionsPending.add({ id: subjectToDelete.id, tableName: 'subjects' });
+      await db.subjects.delete(subjectToDelete.id);
+    }
+
     toast.success(`Cartes réassignées à "${DEFAULT_SUBJECT}".`);
 
-    if (supabase && isOnline && workspaceId) {
-      try {
-        await supabase.from('flashcards').update({ subject: DEFAULT_SUBJECT }).eq('workspace_id', workspaceId).eq('subject', subjectName);
-        await supabase.from('subjects').delete().eq('workspace_id', workspaceId).eq('name', subjectName);
-        await supabase.from('subjects').upsert({ workspace_id: workspaceId, name: DEFAULT_SUBJECT });
-      } catch (err) {
-        console.error("Erreur réassignation sujet cloud:", err);
-        toast.error('Erreur de synchronisation.');
-      }
+    if (isOnline) {
+      syncToCloud();
     }
   };
 
@@ -438,58 +408,30 @@ const formatCardForSupabase = (card) => ({
       interval,
       easiness,
       reviewCount: currentCard.reviewCount + 1,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      isSynced: false
     };
     await db.cards.update(currentCard.id, updated);
 
-    if (session && isOnline && workspaceId) {
-      try {
-        await supabase.from('flashcards').update({
-            next_review: nextReview,
-            interval: interval,
-            easiness_factor: updated.easiness,
-            repetitions: updated.reviewCount,
-            updated_at: updated.updatedAt
-          }).eq('id', currentCard.id).eq('workspace_id', workspaceId);
-      } catch (err) {
-        console.error('Erreur review cloud:', err);
-        toast.error('Erreur de synchronisation.');
-      }
+    if (isOnline) {
+      syncToCloud();
     }
   };
 
   const addCourse = async (course) => {
+    const newCourse = {
+      ...course,
+      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      created_at: new Date().toISOString(),
+      workspace_id: workspaceId,
+      isSynced: false
+    };
+
+    await db.courses.add(newCourse);
+    toast.success('Cours ajouté !');
+
     if (isOnline) {
-      const courseForSupabase = {
-        ...course,
-        created_at: new Date().toISOString(),
-        workspace_id: workspaceId
-      };
-      try {
-        const { data, error } = await supabase.from('courses').insert(courseForSupabase).select().single();
-        if (error) {
-          console.error('Erreur Supabase:', error);
-          throw new Error(`Erreur ajout cours: ${error.message}`);
-        }
-        if (!data) {
-          throw new Error('Aucune donnée reçue de Supabase');
-        }
-        await db.courses.add(data);
-        toast.success('Cours ajouté !');
-      } catch (err) {
-        console.error('Erreur add course cloud:', err);
-        toast.error("L'ajout du cours a échoué.");
-      }
-    } else {
-      const newCourse = {
-        ...course,
-        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        created_at: new Date().toISOString(),
-        workspace_id: workspaceId,
-        isSynced: false
-      };
-      await db.courses.add(newCourse);
-      toast.success('Cours ajouté hors ligne !');
+      syncToCloud();
     }
   };
 
