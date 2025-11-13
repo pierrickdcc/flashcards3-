@@ -436,6 +436,7 @@ const formatCardForSupabase = (card) => ({
   };
 
   const signOut = async () => {
+    await syncToCloud();
     await db.delete();
     await supabase.auth.signOut();
     window.location.reload();
